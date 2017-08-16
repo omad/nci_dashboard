@@ -63,7 +63,7 @@ class NCIServer:
         df = pd.DataFrame.from_dict(outputs, orient='index')
 
         duration_cols = ['resources_used.cput', 'resources_used.walltime']
-        numeric_cols = ['resources_used.cpupercent ', 'resources_used.ncpus']
+        numeric_cols = ['resources_used.cpupercent', 'resources_used.ncpus']
 
         df[duration_cols] = df[duration_cols].apply(pd.to_timedelta)
         df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric)
@@ -76,7 +76,8 @@ class NCIServer:
         running_jobs = simple_jobs_df[simple_jobs_df.state == 'R']
         extra_info = self.detailed_job_info(*running_jobs.jobid)
 
-        return pd.merge(simple_jobs_df, extra_info, how='left', left_index=True, right_index=True)
+        merged = pd.merge(simple_jobs_df, extra_info, how='left', left_on='jobid', right_index=True)
+        return merged
 
 
     @staticmethod
@@ -106,9 +107,11 @@ if __name__ == '__main__':
 
     names_of_users = raijin.find_names_of_users(*relevant_users)
     print(names_of_users)
-
-    jobs = raijin.find_jobs_for_users(*relevant_users)
+    #
+    # jobs = raijin.find_jobs_for_users(*relevant_users)
+    # print(jobs)
+    #
+    # job_details = raijin.detailed_job_info(*jobs.jobid)
+    # print(job_details)
+    jobs = raijin.detailed_job_info_for_users(*relevant_users)
     print(jobs)
-
-    job_details = raijin.detailed_job_info(*jobs.jobid)
-    print(job_details)
