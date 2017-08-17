@@ -9,22 +9,34 @@ def qstat_to_df(output):
                               'reqd_mem', 'reqd_time', 'state', 'elap_time'])
 
 
+def convert_to_bytes(mem_string):
+    scale = {'mb': 2 ** 20, 'gb': 2 ** 30, 'tb': 2 ** 40}
+    num, units = int(mem_string[:-2]), mem_string[-2:]
+    return num * scale[units]
+
+
+def hhmm_to_timedelta(hhmm):
+    h, m = hhmm.split(':')
+    return pd.Timedelta(hours=int(h), minutes=int(m))
+
 class NCIServer:
     def __init__(self):
         client = SSHClient()
         client.load_system_host_keys()
-        client.connect('raijin.nci.org.au', username='dra547')
         self.client = client
+        client.connect('raijin.nci.org.au', username='dra547')
 
     def execute_command(self, command):
+        stdin, stdout, stderr = None, None, None
         try:
             stdin, stdout, stderr = self.client.exec_command(command)
 
             return stdout.read().decode('ascii')
         finally:
-            stdin.close()
-            stdout.close()
-            stderr.close()
+            if stdin:
+                stdin.close()
+                stdout.close()
+                stderr.close()
 
     def print_command_output(self, command):
         output = self.execute_command(command)
@@ -52,7 +64,13 @@ class NCIServer:
 
     def find_jobs_for_users(self, *users):
         output = self.execute_command(f'qstat -w -u {",".join(users)}')
-        return qstat_to_df(output)
+        df = qstat_to_df(output)
+
+        df['reqd_mem'] = df['reqd_mem'].apply(convert_to_bytes)
+
+        df['reqd_time'] = df['reqd_time'].apply(hhmm_to_timedelta)
+        df['elap_time'] = df['elap_time'].apply(lambda x: pd.to_timedelta(x) if '-' not in x else None)
+        return df
 
     def detailed_job_info(self, *jobids):
         qstat_f_output = self.execute_command(f'qstat -f {" ".join(jobids)}')
@@ -63,12 +81,12 @@ class NCIServer:
         df = pd.DataFrame.from_dict(outputs, orient='index')
 
         duration_cols = ['resources_used.cput', 'resources_used.walltime']
-        numeric_cols = ['resources_used.cpupercent', 'resources_used.ncpus']
-
         df[duration_cols] = df[duration_cols].apply(pd.to_timedelta)
+
+        numeric_cols = ['resources_used.cpupercent', 'resources_used.ncpus']
         df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric)
 
-        df['cpu_efficiency'] = 100 * df['resources_used.cput'] / df['resources_used.walltime'] / df['resources_used.ncpus']
+        df['cpu_efficiency'] = df['resources_used.cput'] / df['resources_used.walltime'] / df['resources_used.ncpus']
         return df
 
     def detailed_job_info_for_users(self, *users):
@@ -76,9 +94,10 @@ class NCIServer:
         running_jobs = simple_jobs_df[simple_jobs_df.state == 'R']
         extra_info = self.detailed_job_info(*running_jobs.jobid)
 
+        extra_info.drop(['queue', 'session_id'], axis=1, inplace=True)
         merged = pd.merge(simple_jobs_df, extra_info, how='left', left_on='jobid', right_index=True)
-        return merged
 
+        return merged
 
     @staticmethod
     def _decode_full_qstat(qstat_f_output):
