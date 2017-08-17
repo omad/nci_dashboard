@@ -7,8 +7,8 @@ Store information about running jobs from the NCI in an ElasticSearch Cluster
   - Currently `u46`, `v10`, `r78`
 * Currently hard coded to connect-through the GA proxy
   - Should be replaced with IAM auth if running in lambda
+  - Connects to port 80, but should use 443, haven't gotten this working yet.
 """
-
 
 from threading import Thread
 import time
@@ -41,7 +41,6 @@ def update_template(es):
     es.indices.put_template(name='dea-jobs', body=jobs_template)
 
 
-
 def update_jobs_list():
     while True:
         # do some blocking computation
@@ -69,11 +68,7 @@ def update_jobs_list():
 
         logging.debug(summary)
 
-        # es.index(index_name, doc_type='job_status', body=jobs)
-
         time.sleep(60)
-
-
 
 
 class ProxiedConnection(RequestsHttpConnection):
@@ -88,9 +83,10 @@ HOSTS = [{'host': 'search-digitalearthaustralia-lz7w5p3eakto7wrzkmg677yebm.ap-so
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    connections.create_connection(hosts=['search-digitalearthaustralia-lz7w5p3eakto7wrzkmg677yebm.ap-southeast-2.es.amazonaws.com:80'],
-                                  # use_ssl=True)
-                                  connection_class=ProxiedConnection, proxies={'http': 'proxy.inno.lan:3128'})
+    connections.create_connection(
+        hosts=['search-digitalearthaustralia-lz7w5p3eakto7wrzkmg677yebm.ap-southeast-2.es.amazonaws.com:80'],
+        # use_ssl=True)
+        connection_class=ProxiedConnection, proxies={'http': 'proxy.inno.lan:3128'})
     logging.info('connected to ES')
 
     client = connections.get_connection()

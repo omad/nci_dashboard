@@ -19,6 +19,7 @@ def hhmm_to_timedelta(hhmm):
     h, m = hhmm.split(':')
     return pd.Timedelta(hours=int(h), minutes=int(m))
 
+
 class NCIServer:
     def __init__(self):
         client = SSHClient()
