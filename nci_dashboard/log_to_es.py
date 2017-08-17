@@ -1,11 +1,15 @@
 """
-Store information about running jobs from the NCI
+Store information about running jobs from the NCI in an ElasticSearch Cluster
 
 * Create a new index for each day, named `dea-nci-*`
-
-
-
+* Sleep for 60 seconds between each `qstat` query
+* Grabs a list of users for the relevant groups for requesting job information
+  - Currently `u46`, `v10`, `r78`
+* Currently hard coded to connect-through the GA proxy
+  - Should be replaced with IAM auth if running in lambda
 """
+
+
 from threading import Thread
 import time
 from elasticsearch import RequestsHttpConnection
@@ -22,20 +26,20 @@ logger = logging.getLogger(__name__)
 raijin = None
 relevant_users = []
 
-jobs_template = {'template': 'dea-nci-*',
-                 'mappings': {
-                     'job_status': {
-                         'properties': {'cpu_efficiency': {'type': 'float'},
-                                        'elap_time': {'type': 'float'},
-                                        'nodes': {'type': 'integer'},
-                                        'reqd_mem': {'type': 'long'},
-                                        'reqd_time': {'type': 'integer'},
-                                        'tasks': {'type': 'integer'},
-                                        '@timestamp': {'type': 'date'}}}}}
 
-# from elasticsearch import Elasticsearch
-# es = Elasticsearch()
-# es.indices.put_template(jobs_template)
+def update_template(es):
+    jobs_template = {'template': 'dea-nci-*',
+                     'mappings': {
+                         'job_status': {
+                             'properties': {'cpu_efficiency': {'type': 'float'},
+                                            'elap_time': {'type': 'float'},
+                                            'nodes': {'type': 'integer'},
+                                            'reqd_mem': {'type': 'long'},
+                                            'reqd_time': {'type': 'integer'},
+                                            'tasks': {'type': 'integer'},
+                                            '@timestamp': {'type': 'date'}}}}}
+    es.indices.put_template(name='dea-jobs', body=jobs_template)
+
 
 
 def update_jobs_list():
@@ -79,13 +83,18 @@ class ProxiedConnection(RequestsHttpConnection):
         self.session.proxies = proxies
 
 
+HOSTS = [{'host': 'search-digitalearthaustralia-lz7w5p3eakto7wrzkmg677yebm.ap-southeast-2.es.amazonaws.com',
+          'port': 443, 'use_ssl': True}]
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    connections.create_connection(hosts=['search-test-nxk5y2djtkyoacsud4az74vpe4.ap-southeast-2.es.amazonaws.com:80'],
+    connections.create_connection(hosts=['search-digitalearthaustralia-lz7w5p3eakto7wrzkmg677yebm.ap-southeast-2.es.amazonaws.com:80'],
                                   # use_ssl=True)
                                   connection_class=ProxiedConnection, proxies={'http': 'proxy.inno.lan:3128'})
     logging.info('connected to ES')
+
+    client = connections.get_connection()
+    update_template(client)
 
     raijin = NCIServer()
     logging.info('connected to NCI: %s', raijin)
