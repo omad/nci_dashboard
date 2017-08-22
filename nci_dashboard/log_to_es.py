@@ -37,6 +37,15 @@ def update_template(es):
                                             'reqd_mem': {'type': 'long'},
                                             'reqd_time': {'type': 'integer'},
                                             'tasks': {'type': 'integer'},
+                                            "session_id": {
+                                                "type": "text",
+                                                "fields": {
+                                                    "keyword": {
+                                                        "type": "keyword",
+                                                        "ignore_above": 256
+                                                    }
+                                                }
+                                            },
                                             '@timestamp': {'type': 'date'}}}}}
     es.indices.put_template(name='dea-jobs', body=jobs_template)
 
